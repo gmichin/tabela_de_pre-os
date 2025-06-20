@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabela de Custos e Margens</title>
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="custo-clientes-produtos.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Tabela de Custos e Margens</h1>
+        
+        <div class="sections-container">
+            <div class="section">
+                <div class="section-title">Configurações</div>
+                <div class="input-group">
+                    <label for="contrato">Contrato (%):</label>
+                    <input type="number" id="contrato" step="0.01" value="5">
+                </div>
+
+                <div class="input-group">
+                    <label for="comissao">Comissão (%):</label>
+                    <input type="number" id="comissao" step="0.01" value="3">
+                </div>
+                
+                <div class="input-group" style="display: block;margin-bottom: 5px;font-size: 0.9rem;color: #555;">
+                    <label for="margem">Margem (%):</label>
+                    <input type="number" id="margem" step="0.01" value="6">
+                </div>
+                
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Informações do Cliente</div>
+                <div class="input-group">
+                    <label for="vendedor">Vendedor:</label>
+                    <input type="text" id="vendedor">
+                </div>
+                
+                <div class="input-group">
+                    <label for="cliente">Cliente:</label>
+                    <input type="text" id="cliente">
+                </div>
+                
+            </div>
+            
+        </div>
+        
+        <div class="buttons-container">
+            <button onclick="exportarParaJSON()">Exportar para JSON</button>
+            <button onclick="exportarParaImagens()">Exportar para Imagens</button>
+            <button onclick="exportarParaExcel()">Exportar para Excel</button>
+            <button onclick="exportarParaPDF()">Exportar para PDF</button>
+        </div>
+        
+        <h3 style="text-align: center;">TABELAS DINÂMICA</h3>
+        
+        <button onclick="abrirSeletorGrupos()">Selecionar Grupos</button>
+        <button onclick="atualizarTabela()">Atualizar tabela dinâmica</button>
+        <div id="tabela-container" style="display: none;"></div>
+        <button onclick="salvarTabelaCliente()">Salvar tabela dinâmica</button>
+    
+        <h3 style="text-align: center;">TABELAS SALVAS</h3>
+        
+        <button onclick="abrirEditorDeCustos()">Atualizar custos de tabelas existentes</button>
+        <div id="tabelas-salvas"></div>
+    </div>
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script src="custo-clientes-produtos.js"></script>
+</body>
+</html>
