@@ -142,7 +142,7 @@ const gruposAtivos = {
     salgados_10kg: false,
     salgados_20kg: true,
     salames: true,
-    defumados: false,
+    defumados: true,
     suspiro: true,
     torresmos: true,
     empanados: false,
