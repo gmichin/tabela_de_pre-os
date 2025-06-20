@@ -590,69 +590,89 @@ function salvarTabelaCliente() {
     }
     
     // Verificar se já existe uma tabela para este cliente
-    const tabelaExistenteIndex = tabelasPorVendedor[vendedor].findIndex(t => t.cliente === cliente);
+    const tabelaExistenteIndex = tabelasPorVendedor[vendedor].findIndex(t => t.cliente === cliente && t.tipo === 'completa');
     
-    // Preparar os dados para a tabela resumida
-    const dadosTabelaResumida = produtos.map(produto => {
+    // 1. Tabela Completa (como já estava)
+    const dadosTabelaCompleta = produtos.map(produto => {
         const precoAtual = precosAtuais[produto.nome] || 0;
         
         // Encontrar os dados na tabela principal
         const rowData = grid.config.data.find(row => row[18] === produto.nome);
         if (!rowData) return null;
         
-        // Extrair valores numéricos das margens (removendo o '%' e convertendo para número)
         const margemAtual = parseFloat(rowData[17].replace('%', '')) || 0;
         const margemPretendida = parseFloat(rowData[16].replace('%', '')) || 0;
         
-        // Verificar se o preço atual é 0
         const precoAtualEhZero = precoAtual === 0 || rowData[15] === '0.00';
         
-        // Se preço atual for 0, mostrar apenas pretendidos
         if (precoAtualEhZero) {
             return [
                 produto.nome,
-                rowData[1] || '-', // Custo
-                '-', // Preço Atual (vazio)
-                rowData[14], // Preço Pretendido
-                '-', // Margem Atual (vazio)
-                rowData[16]  // Margem Pretendida
+                rowData[1] || '-',
+                '-',
+                rowData[14],
+                '-',
+                rowData[16]
             ];
         }
         
-        // Caso contrário, aplicar a lógica anterior de comparação de margens
         const mostrarDadosPretendidos = Math.floor(margemAtual) < Math.floor(margemPretendida);
         
         return [
             produto.nome,
-            rowData[1] || '-', // Custo
-            rowData[15], // Preço Atual
-            mostrarDadosPretendidos ? rowData[14] : '-', // Preço Pretendido
-            rowData[17], // Margem Atual
-            mostrarDadosPretendidos ? rowData[16] : '-'  // Margem Pretendida
+            rowData[1] || '-',
+            rowData[15],
+            mostrarDadosPretendidos ? rowData[14] : '-',
+            rowData[17],
+            mostrarDadosPretendidos ? rowData[16] : '-'
         ];
     }).filter(Boolean);
     
-    // Criar a tabela resumida
-    const tabelaResumida = {
+    // 2. Tabela Simplificada (sem preço atual e margem atual)
+    const dadosTabelaSimplificada = produtos.map(produto => {
+        // Encontrar os dados na tabela principal
+        const rowData = grid.config.data.find(row => row[18] === produto.nome);
+        if (!rowData) return null;
+        
+        return [
+            produto.nome,
+            rowData[1] || '-', // Custo
+            rowData[14],      // Preço Pretendido
+            rowData[16]        // Margem Pretendida
+        ];
+    }).filter(Boolean);
+    
+    // Criar as duas tabelas
+    const tabelaCompleta = {
         cliente,
+        tipo: 'completa',
         contrato,
         comissao,
-        dados: dadosTabelaResumida
+        dados: dadosTabelaCompleta
     };
     
-    if (tabelaExistenteIndex >= 0) {
-        // Atualizar tabela existente
-        tabelasPorVendedor[vendedor][tabelaExistenteIndex] = tabelaResumida;
-    } else {
-        // Adicionar nova tabela
-        tabelasPorVendedor[vendedor].push(tabelaResumida);
-    }
+    const tabelaSimplificada = {
+        cliente,
+        tipo: 'simplificada',
+        contrato,
+        comissao,
+        dados: dadosTabelaSimplificada
+    };
+    
+    // Remover tabelas existentes para este cliente (se houver)
+    tabelasPorVendedor[vendedor] = tabelasPorVendedor[vendedor].filter(t => t.cliente !== cliente);
+    
+    // Adicionar as novas tabelas
+    tabelasPorVendedor[vendedor].push(tabelaCompleta);
+    tabelasPorVendedor[vendedor].push(tabelaSimplificada);
     
     // Atualizar a exibição das tabelas salvas
     exibirTabelasSalvas();
     
-    alert(`Tabela salva para o cliente ${cliente} no vendedor ${vendedor}`);
+    alert(`Tabelas salvas para o cliente ${cliente} no vendedor ${vendedor}`);
 }
+
+// E atualizar a função exibirTabelasSalvas para mostrar ambas as tabelas
 function exibirTabelasSalvas() {
     const container = document.getElementById('tabelas-salvas');
     container.innerHTML = '';
@@ -665,72 +685,75 @@ function exibirTabelasSalvas() {
         vendedorTitle.className = 'vendedor-title';
         vendedorTitle.textContent = `Vendedor: ${vendedor}`;
         vendedorSection.appendChild(vendedorTitle);
-        console.log(tabelas);
         
+        // Agrupar tabelas por cliente
+        const tabelasPorCliente = {};
         tabelas.forEach(tabela => {
-            const tituloTabela = document.createElement('h3');
-            tituloTabela.textContent = `${tabela.cliente} contrato: ${tabela.contrato}% comissão: ${tabela.comissao}%`;
-            vendedorSection.appendChild(tituloTabela);
+            if (!tabelasPorCliente[tabela.cliente]) {
+                tabelasPorCliente[tabela.cliente] = [];
+            }
+            tabelasPorCliente[tabela.cliente].push(tabela);
+        });
+        
+        // Para cada cliente, mostrar ambas as tabelas
+        for (const [cliente, tabelasCliente] of Object.entries(tabelasPorCliente)) {
+            const clienteTitle = document.createElement('h3');
+            clienteTitle.textContent = `${cliente} - Contrato: ${tabelasCliente[0].contrato}% | Comissão: ${tabelasCliente[0].comissao}%`;
+            vendedorSection.appendChild(clienteTitle);
             
-            const tabelaContainer = document.createElement('div');
-            tabelaContainer.id = `tabela-${vendedor}-${tabela.cliente}`.replace(/\s+/g, '-');
-            vendedorSection.appendChild(tabelaContainer);
-            
-            new gridjs.Grid({
-                columns: [
+            // Mostrar ambas as tabelas do cliente
+            tabelasCliente.forEach((tabela, idx) => {
+                const tabelaTitle = document.createElement('h4');
+                tabelaTitle.textContent = idx === 0 ? 'Custos - Clientes e produtos' : 'Preços de Venda';
+                vendedorSection.appendChild(tabelaTitle);
+                
+                const tabelaContainer = document.createElement('div');
+                tabelaContainer.id = `tabela-${vendedor}-${cliente}-${tabela.tipo}`.replace(/\s+/g, '-');
+                vendedorSection.appendChild(tabelaContainer);
+                
+                // Configuração das colunas baseada no tipo de tabela
+                const columns = tabela.tipo === 'completa' ? [
                     { name: "Produto", width: "100px" },
                     { name: "Custo", width: "70px" },
-                    { 
-                        name: "Preço Atual", 
-                        width: "80px",
+                    { name: "Preço Atual", width: "80px" },
+                    { name: "Preço Pretendido", width: "100px" },
+                    { name: "Margem Atual", width: "90px" },
+                    { name: "Margem Pretendida", width: "110px" }
+                ] : [
+                    { name: "Produto", width: "120px" },
+                    { name: "Custo", width: "80px" },
+                    { name: "Preço Pretendido", width: "100px" },
+                    { name: "Margem Pretendida", width: "110px" }
+                ];
+                
+                new gridjs.Grid({
+                    columns: columns.map(col => ({
+                        ...col,
                         formatter: (cell) => cell === '-' ? gridjs.html('<span style="color: #999">-</span>') : cell
+                    })),
+                    data: tabela.dados,
+                    sort: true,
+                    fixedHeader: true,
+                    height: '400px',
+                    width: '100%',
+                    style: {
+                        table: { 'white-space': 'nowrap' },
+                        td: { 'padding': '5px 8px' }
                     },
-                    { 
-                        name: "Preço Pretendido", 
-                        width: "100px",
-                        formatter: (cell) => cell === '-' ? gridjs.html('<span style="color: #999">-</span>') : cell
-                    },
-                    { 
-                        name: "Margem Atual", 
-                        width: "90px",
-                        formatter: (cell) => cell === '-' ? gridjs.html('<span style="color: #999">-</span>') : cell
-                    },
-                    { 
-                        name: "Margem Pretendida", 
-                        width: "110px",
-                        formatter: (cell) => cell === '-' ? gridjs.html('<span style="color: #999">-</span>') : cell
-                    }
-                ],
-                data: tabela.dados,
-                sort: true,
-                fixedHeader: true,
-                height: '650px',
-                width: '100%',
-                style: {
-                    table: {
-                        'white-space': 'nowrap'
-                    },
-                    td: {
-                        'padding': '5px 8px'
-                    }
-                },
-                breakpoints: [
-                    { 
-                        breakpoint: '768px', 
-                        options: { 
-                            columns: [
-                                'Produto', 
-                                'Preço Atual', 
-                                'Preço Pretendido'
-                            ].map(col => ({
-                                name: col,
-                                hidden: !['Produto', 'Preço Atual', 'Preço Pretendido'].includes(col)
-                            }))
-                        } 
-                    }
-                ]
-            }).render(tabelaContainer);
-        });
+                    breakpoints: [
+                        { 
+                            breakpoint: '768px', 
+                            options: { 
+                                columns: columns.map(col => ({
+                                    name: col.name,
+                                    hidden: !['Produto', 'Preço Atual', 'Preço Pretendido'].includes(col.name)
+                                }))
+                            } 
+                        }
+                    ]
+                }).render(tabelaContainer);
+            });
+        }
         
         container.appendChild(vendedorSection);
     }
@@ -755,188 +778,333 @@ function exportarParaJSON() {
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
 }
-function exportarParaImagens() {
+async function exportarParaImagens() {
     if (Object.keys(tabelasPorVendedor).length === 0) {
         alert("Nenhuma tabela salva para exportar.");
         return;
     }
 
-    // Função auxiliar para capturar e salvar uma tabela como imagem
-    async function salvarTabelaComoImagem(vendedor, cliente, tabelaContainer) {
+    // Load html2canvas from CDN if not already loaded
+    if (typeof html2canvas !== 'function') {
+        await loadScript('https://html2canvas.hertzen.com/dist/html2canvas.min.js');
+    }
+
+    function getShortName(fullName) {
+        const names = fullName.trim().split(/\s+/);
+        if (names.length === 0) return fullName;
+        if (names.length === 1) return names[0];
+        return `${names[0]} ${names[names.length - 2]}`;
+    }
+    // Function to capture and save a table as image
+    async function captureTable(vendedor, cliente, tipo, containerId) {
         try {
-            // Usar html2canvas para capturar o conteúdo da tabela
-            const canvas = await html2canvas(tabelaContainer, {
-                scale: 2, // Aumenta a qualidade da imagem
+            const container = document.getElementById(containerId);
+            if (!container) {
+                console.warn(`Container not found: ${containerId}`);
+                return;
+            }
+
+            // Add temporary class to ensure proper rendering
+            container.classList.add('exporting-image');
+            
+            const canvas = await html2canvas(container, {
+                scale: 2,
                 logging: false,
                 useCORS: true,
-                allowTaint: true
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: container.scrollWidth,
+                windowHeight: container.scrollHeight
             });
 
-            // Converter canvas para imagem e criar link de download
+            // Convert to image and trigger download
+            const shortName = getShortName(vendedor);
             const image = canvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = image;
+            link.download = `${tipo} (${shortName})`.replace(/[^a-zA-Z0-9() -]/g, '');
             
-            // Criar nome do arquivo com vendedor e cliente (removendo caracteres inválidos)
-            const nomeArquivo = `${vendedor.replace(/[^a-z0-9]/gi, '_')}-${cliente.replace(/[^a-z0-9]/gi, '_')}.png`;
-            link.download = nomeArquivo;
-            
-            // Disparar o download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             
-            // Pequeno delay entre cada download para evitar problemas
-            return new Promise(resolve => setTimeout(resolve, 500));
+            // Remove temporary class
+            container.classList.remove('exporting-image');
+            
+            // Small delay between exports
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
         } catch (error) {
-            console.error(`Erro ao exportar tabela de ${vendedor} - ${cliente}:`, error);
-            return Promise.resolve();
+            console.error('Error exporting image:', error);
         }
     }
 
-    // Processar todas as tabelas salvas
-    (async function() {
+    // Process all tables
+    try {
         for (const [vendedor, tabelas] of Object.entries(tabelasPorVendedor)) {
             for (const tabela of tabelas) {
-                const containerId = `tabela-${vendedor}-${tabela.cliente}`.replace(/\s+/g, '-');
-                const tabelaContainer = document.getElementById(containerId);
-                
-                if (tabelaContainer) {
-                    await salvarTabelaComoImagem(vendedor, tabela.cliente, tabelaContainer);
-                }
+                const tipo = tabela.tipo === 'completa' ? 'Custos - Clientes e produtos' : 'Precos de Venda';
+                const containerId = `tabela-${vendedor}-${tabela.cliente}-${tabela.tipo}`.replace(/\s+/g, '-');
+                await captureTable(vendedor, tabela.cliente, tipo, containerId);
             }
         }
-        
         alert("Exportação para imagens concluída!");
-    })();
+    } catch (error) {
+        console.error('Export failed:', error);
+        alert("Erro ao exportar imagens. Verifique o console para detalhes.");
+    }
 }
-async function exportarParaExcel() {
+
+// Helper function to load scripts dynamically
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+function exportarParaExcel() {
+    // Verificar se há tabelas salvas
     if (Object.keys(tabelasPorVendedor).length === 0) {
         alert("Nenhuma tabela salva para exportar.");
         return;
     }
 
-    const workbook = new ExcelJS.Workbook();
-    
+    // Função para sanitizar texto (remover caracteres especiais)
+    const sanitizeText = (text) => {
+        return text.toString()
+            .replace(/ã/g, 'a').replace(/Ã/g, 'A')
+            .replace(/á/g, 'a').replace(/Á/g, 'A')
+            .replace(/à/g, 'a').replace(/À/g, 'A')
+            .replace(/â/g, 'a').replace(/Â/g, 'A')
+            .replace(/ä/g, 'a').replace(/Ä/g, 'A')
+            .replace(/é/g, 'e').replace(/É/g, 'E')
+            .replace(/ê/g, 'e').replace(/Ê/g, 'E')
+            .replace(/í/g, 'i').replace(/Í/g, 'I')
+            .replace(/ó/g, 'o').replace(/Ó/g, 'O')
+            .replace(/ô/g, 'o').replace(/Ô/g, 'O')
+            .replace(/õ/g, 'o').replace(/Õ/g, 'O')
+            .replace(/ú/g, 'u').replace(/Ú/g, 'U')
+            .replace(/ç/g, 'c').replace(/Ç/g, 'C')
+            .replace(/ñ/g, 'n').replace(/Ñ/g, 'N');
+    };
+
     for (const [vendedor, tabelas] of Object.entries(tabelasPorVendedor)) {
-        tabelas.forEach((tabela, idx) => {
-            const worksheet = workbook.addWorksheet(
-                `${vendedor.substring(0, 10)}-${tabela.cliente.substring(0, 10)}`.slice(0, 31)
-            );
-
-            // 🔵 Adicionar título (linha mesclada)
-            worksheet.mergeCells('A1:F1');
-            const titleRow = worksheet.getCell('A1');
-            titleRow.value = `Vendedor: ${vendedor} | Cliente: ${tabela.cliente} | Produção: ${tabela.producao} | Contrato: ${tabela.contrato}% | Comissão: ${tabela.comissao}%`;
-            titleRow.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FF3661A6' } // Azul
-            };
-            titleRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
-
-            // 🟢 Adicionar cabeçalho da tabela
-            const headerRow = worksheet.addRow(['Produto', 'Custo', 'Preço Atual', 'Preço Pretendido', 'Margem Atual', 'Margem Pretendida']);
-            headerRow.eachCell(cell => {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FF5C8F3A' } // Verde
-                };
-                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                cell.alignment = { horizontal: 'center' };
-            });
-
-            // 📊 Adicionar dados
-            tabela.dados.forEach(row => {
-                worksheet.addRow(row);
-            });
-
-            // Ajustar largura das colunas
-            worksheet.columns = [
-                { width: 20 }, // Produto
-                { width: 10 }, // Custo
-                { width: 20 }, // Preço Atual
-                { width: 20 }, // Preço Pretendido
-                { width: 20 }, // Margem Atual
-                { width: 20 }  // Margem Pretendida
-            ];
-        });
-    }
-
-    // Exportar
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), 'Custo-Clientes e Produtos.xlsx');
-}
-// Função para exportar todas as tabelas como PDF (ajustado para layout completo)
-function exportarParaPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({
-        orientation: 'landscape' // Modo paisagem para mais espaço
-    });
-    
-    let isFirstPage = true;
-    
-    // Adicionar tabelas salvas por vendedor/cliente
-    for (const [vendedor, tabelas] of Object.entries(tabelasPorVendedor)) {
+        // Agrupar tabelas por cliente
+        const tabelasPorCliente = {};
         tabelas.forEach(tabela => {
-            // Verificar se precisa de nova página (não na primeira página)
-            if (!isFirstPage) {
-                doc.addPage('landscape');
-            } else {
-                isFirstPage = false;
+            if (!tabelasPorCliente[tabela.cliente]) {
+                tabelasPorCliente[tabela.cliente] = {};
+            }
+            tabelasPorCliente[tabela.cliente][tabela.tipo] = tabela.dados;
+        });
+
+        let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" 
+              xmlns:x="urn:schemas-microsoft-com:office:excel"
+              xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+            <!--[if gte mso 9]>
+            <xml>
+                <x:ExcelWorkbook>
+                    <x:ExcelWorksheets>
+                        ${Object.keys(tabelasPorCliente).map(cliente => `
+                        <x:ExcelWorksheet>
+                            <x:Name>${sanitizeText(cliente.substring(0, 31))}</x:Name>
+                            <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                        </x:ExcelWorksheet>
+                        `).join('')}
+                    </x:ExcelWorksheets>
+                </x:ExcelWorkbook>
+            </xml>
+            <![endif]>
+            <style>
+                .produto { background-color: #FFD1DC; font-weight: bold; text-align: center; border: 1px solid #C0C0C0; }
+                .custo { background-color: #FFEB3B; font-weight: bold; text-align: center; border: 1px solid #C0C0C0; } /* Amarelo forte */
+                .atual { background-color: #FFDAB9; font-weight: bold; text-align: center; border: 1px solid #C0C0C0; }
+                .pretendido { background-color: #B0E0E6; font-weight: bold; text-align: center; border: 1px solid #C0C0C0; }
+                .linha-branca { background-color: #FFFFFF; }
+                .linha-cinza { background-color: #F8F8F8; }
+                td { padding: 5px; border: 1px solid #C0C0C0; }
+                table { border-collapse: collapse; width: 100%; margin-bottom: 30px; border: none; }
+                h2 { color: #555555; margin-bottom: 10px; font-family: Arial; }
+                h3 { color: #666666; margin: 15px 0 5px 0; font-family: Arial; }
+                .sheet { margin-bottom: 40px; }
+            </style>
+        </head>
+        <body>`;
+
+        // Para cada cliente (cada cliente será uma aba no Excel)
+        for (const [cliente, tabelasCliente] of Object.entries(tabelasPorCliente)) {
+            html += `<div class="sheet">`;
+            html += `<h2>${cliente}</h2>`;
+            
+            // Tabela Completa
+            if (tabelasCliente.completa) {
+                html += `<h3>Tabela Completa</h3>`;
+                html += `
+                <table>
+                    <tr>
+                        <th class="produto">Produto</th>
+                        <th class="custo">Custo</th>
+                        <th class="atual">Preço Atual</th>
+                        <th class="pretendido">Preço Pretendido</th>
+                        <th class="atual">Margem Atual</th>
+                        <th class="pretendido">Margem Pretendida</th>
+                    </tr>`;
+                
+                tabelasCliente.completa.forEach((linha, i) => {
+                    html += `<tr class="${i % 2 === 0 ? 'linha-branca' : 'linha-cinza'}">`;
+                    linha.forEach(celula => {
+                        html += `<td>${celula}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+                
+                html += `</table>`;
+            }
+
+            // Espaço entre tabelas
+            html += `<div style="height: 20px;"></div>`;
+            
+            // Tabela Simplificada
+            if (tabelasCliente.simplificada) {
+                html += `<h3>Tabela Simplificada</h3>`;
+                html += `
+                <table>
+                    <tr>
+                        <th class="produto">Produto</th>
+                        <th class="custo">Custo</th>
+                        <th class="pretendido">Preço Pretendido</th>
+                        <th class="pretendido">Margem Pretendida</th>
+                    </tr>`;
+
+                tabelasCliente.simplificada.forEach((linha, i) => {
+                    // Verifica se é a estrutura da tabela simplificada (4 colunas)
+                    if (linha.length === 4) {
+                        html += `<tr class="${i % 2 === 0 ? 'linha-branca' : 'linha-cinza'}">`;
+                        html += `<td>${linha[0]}</td>`; // Produto
+                        html += `<td>${linha[1]}</td>`; // Custo
+                        html += `<td>${linha[2]}</td>`; // Preço Pretendido
+                        html += `<td>${linha[3]}</td>`; // Margem Pretendida
+                        html += `</tr>`;
+                    } 
+                    // Se for a estrutura da tabela completa (6 colunas)
+                    else if (linha.length === 6) {
+                        html += `<tr class="${i % 2 === 0 ? 'linha-branca' : 'linha-cinza'}">`;
+                        html += `<td>${linha[0]}</td>`; // Produto
+                        html += `<td>${linha[1]}</td>`; // Custo
+                        html += `<td>${linha[3]}</td>`; // Preço Pretendido
+                        html += `<td>${linha[5]}</td>`; // Margem Pretendida
+                        html += `</tr>`;
+                    }
+                });
+
+                html += `</table>`;
             }
             
-            // Configurar margens e tamanhos
-            const margin = 10;
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            const tableWidth = pageWidth - 2 * margin;
-            
-            // Adicionar cabeçalho com informações
-            doc.setFontSize(12);
-            doc.setTextColor(40);
-            doc.text(`Vendedor: ${vendedor}`, margin, margin + 5);
-            doc.text(`Cliente: ${tabela.cliente}`, pageWidth / 2, margin + 5);
-            doc.text(`Config: ${tabela.producao} | Contrato: ${tabela.contrato}% | Comissão: ${tabela.comissao}%`, margin, margin + 15);
-            
-            // Preparar dados da tabela
-            const tableData = tabela.dados.map(row => [row[0], row[1], row[2], row[3], row[4], row[5]]);
-            
-            // Configurar a tabela para ocupar o máximo de espaço possível
-            doc.autoTable({
-                head: [['Produto', 'Custo', 'Preço Atual', 'Preço Pretendido', 'Margem Atual', 'Margem Pretendida']],
-                body: tableData,
-                startY: margin + 25,
-                margin: { horizontal: margin },
-                tableWidth: 'auto',
-                styles: { 
-                    fontSize: 8,
-                    cellPadding: 2, // Reduzir o padding das células
-                    overflow: 'linebreak',
-                    lineHeight: 1.2 // Reduzir a altura da linha
-                },
-                columnStyles: {
-                    0: { cellWidth: 'auto' },
-                    1: { cellWidth: 'auto' },
-                    2: { cellWidth: 'auto' },
-                    3: { cellWidth: 'auto' },
-                    4: { cellWidth: 'auto' },
-                    5: { cellWidth: 'auto' }
-                },
-                didDrawPage: function(data) {
-                    // Adicionar rodapé com número da página
-                    doc.setFontSize(10);
-                    doc.text(`Página ${doc.internal.getNumberOfPages()}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-                }
-            });
-        });
+            html += `</div>`; // Fecha a div.sheet
+        }
+
+        html += `</body></html>`;
+
+        // Criar blob e fazer download
+        const blob = new Blob([html], {type: 'application/vnd.ms-excel;charset=utf-8'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Tabelas_${vendedor}_${new Date().toISOString().slice(0,10)}.xls`;
+        link.click();
     }
-    
-    // Salvar o PDF
-    doc.save('Custo-Clientes e Produtos.pdf');
+
+    alert("Arquivos Excel gerados com sucesso (um por vendedor).");
 }
+
+// Função para exportar todas as tabelas como PDF (ajustado para layout completo)
+function exportarParaPDF() {
+    // Verificar se há tabelas salvas
+    if (Object.keys(tabelasPorVendedor).length === 0) {
+        alert("Nenhuma tabela salva para exportar.");
+        return;
+    }
+
+    // Para cada vendedor, criar um PDF
+    for (const [vendedor, tabelas] of Object.entries(tabelasPorVendedor)) {
+        // Usar a versão UMD do jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let yPos = 20;
+        
+        // Agrupar tabelas por cliente
+        const tabelasPorCliente = {};
+        tabelas.forEach(tabela => {
+            if (!tabelasPorCliente[tabela.cliente]) {
+                tabelasPorCliente[tabela.cliente] = [];
+            }
+            tabelasPorCliente[tabela.cliente].push(tabela);
+        });
+
+        // Para cada cliente, adicionar as tabelas ao PDF
+        for (const [cliente, tabelasCliente] of Object.entries(tabelasPorCliente)) {
+            // Adicionar cabeçalho do cliente
+            doc.setFontSize(14);
+            doc.text(`Cliente: ${cliente}`, 15, yPos);
+            doc.setFontSize(10);
+            yPos += 10;
+            doc.text(`Contrato: ${tabelasCliente[0].contrato}% | Comissão: ${tabelasCliente[0].comissao}%`, 15, yPos);
+            yPos += 15;
+
+            // Tabela Completa
+            doc.setFontSize(12);
+            doc.text('Tabela Completa', 15, yPos);
+            yPos += 10;
+            
+            const headersCompleta = ["Produto", "Custo", "Preço Atual", "Preço Pretendido", "Margem Atual", "Margem Pretendida"];
+            const dataCompleta = tabelasCliente.find(t => t.tipo === 'completa').dados;
+            
+            doc.autoTable({
+                startY: yPos,
+                head: [headersCompleta],
+                body: dataCompleta,
+                margin: { left: 15 },
+                styles: { fontSize: 8 }
+            });
+            yPos = doc.lastAutoTable.finalY + 10;
+
+            // Tabela Simplificada
+            doc.setFontSize(12);
+            doc.text('Tabela Simplificada', 15, yPos);
+            yPos += 10;
+            
+            const headersSimplificada = ["Produto", "Custo", "Preço Pretendido", "Margem Pretendida"];
+            const dataSimplificada = tabelasCliente.find(t => t.tipo === 'simplificada').dados;
+            
+            doc.autoTable({
+                startY: yPos,
+                head: [headersSimplificada],
+                body: dataSimplificada,
+                margin: { left: 15 },
+                styles: { fontSize: 8 }
+            });
+            yPos = doc.lastAutoTable.finalY + 15;
+            
+            // Adicionar nova página se não for o último cliente
+            if (Object.keys(tabelasPorCliente).indexOf(cliente) < Object.keys(tabelasPorCliente).length - 1) {
+                doc.addPage();
+                yPos = 20;
+            }
+        }
+
+        // Salvar o PDF para este vendedor
+        doc.save(`Tabelas_${vendedor}_${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    alert("Arquivos PDF gerados com sucesso (um por vendedor).");
+}
+
 // Função para carregar os dados do arquivo JSON
 async function carregarDadosIniciais() {
     try {
